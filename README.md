@@ -1,347 +1,137 @@
 # 🛡️ TruthLens AI
 
-> **An AI-Powered Deepfake Detection System for Image, Video, Audio, and Text using Python & Gradio**
+**Advanced Fake Content Detection System** — a Gradio-based web app for detecting manipulated Images, Videos, Audio, and Text, with a built-in user authentication system.
 
-TruthLens AI is a Final Year Project (FYP) developed to detect manipulated or AI-generated content across multiple media formats. The system analyzes **Images, Videos, Audio, and Text** using Artificial Intelligence and Machine Learning techniques, then provides a **Real/Fake prediction**, **confidence score**, and **detailed explanation** for every analysis.
-
----
-
-# 📌 Features
-
-## 🔐 Authentication
-- User Login
-- User Registration
-- Secure Password Storage
-- Session Management
+> ⚠️ This is a **Final Year Project frontend**. Detection results are currently placeholder/dummy outputs — real AI model integration is pending (see [Roadmap](#-roadmap)).
 
 ---
 
-## 🖼️ Image Deepfake Detection
+## ✨ Features
 
-- Upload JPG, PNG, JPEG images
-- Detect manipulated or AI-generated images
-- Confidence Score
-- AI Explanation
-- Image Preview
-
----
-
-## 🎥 Video Deepfake Detection
-
-- Upload MP4, AVI, MOV videos
-- Frame-by-frame analysis
-- Facial inconsistency detection
-- Confidence Score
-- AI-generated explanation
+- 🔐 **User Authentication** — Signup, Login, and Logout with secure password hashing (PBKDF2-HMAC-SHA256 + per-user salt)
+- 🖼️ **Image Deepfake Detection** — upload and analyze images
+- 🎥 **Video Deepfake Detection** — upload and analyze videos
+- 🎤 **Audio Verification** — voice/speaker matching analysis
+- 📝 **Text Misinformation Detection** — detect misleading or biased text
+- 📜 **Analysis History** — view past detection results
+- 📄 **Reports** — downloadable analysis reports (backend pending)
+- 🎨 Custom **Aurora Violet** dark theme UI, fully responsive
 
 ---
 
-## 🎤 Audio Deepfake Detection
+## 🖥️ Tech Stack
 
-- Upload MP3 or WAV files
-- Voice feature extraction
-- Voice comparison
-- Fake voice detection
-- Confidence Score
-- AI explanation
-
----
-
-## 📰 Text Fake News Detection
-
-- Analyze articles
-- Detect misinformation
-- Fake news classification
-- AI confidence score
-- Reason generation
+| Layer      | Technology                     |
+|------------|---------------------------------|
+| UI         | [Gradio](https://gradio.app)    |
+| Database   | SQLite3                         |
+| Auth       | PBKDF2-HMAC-SHA256 password hashing |
+| Language   | Python 3                        |
 
 ---
 
-## 📊 Dashboard
+## 📦 Installation
 
-- Upload history
-- Previous reports
-- Statistics
-- User profile
-- Recent analyses
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/<your-username>/truthlens-ai.git
+   cd truthlens-ai
+   ```
 
----
+2. **Create a virtual environment (recommended)**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate      # Windows: venv\Scripts\activate
+   ```
 
-## 📄 Report Generation
-
-Generate downloadable reports containing:
-
-- Prediction
-- Confidence Score
-- AI Explanation
-- Analysis Date
-- Uploaded File Information
-
----
-
-# 🚀 Technology Stack
-
-## Frontend
-
-- Python
-- Gradio
-
-## Backend
-
-- Python
-
-## Database
-
-- MongoDB
-
-## AI & Machine Learning
-
-- PyTorch
-- OpenCV
-- Transformers
-- Whisper
-- Librosa
-- NumPy
-- Pandas
+3. **Install dependencies**
+   ```bash
+   pip install gradio
+   ```
 
 ---
 
-# 🏗️ System Architecture
+## 🚀 Usage
 
-```
-                   User
-                     │
-                     ▼
-             Gradio Interface
-                     │
-                     ▼
-             Python Backend
-                     │
-      ┌──────────────┼──────────────┐
-      │              │              │
-      ▼              ▼              ▼
- Image Model     Audio Model     NLP Model
-      │              │              │
-      └──────────────┼──────────────┘
-                     │
-                     ▼
-        AI Decision & Explanation
-                     │
-                     ▼
-               MongoDB Database
-                     │
-                     ▼
-             Reports & History
-```
-
----
-
-# 📂 Project Structure
-
-```
-TruthLens-AI/
-│
-├── app.py
-├── assets/
-├── models/
-│   ├── image/
-│   ├── video/
-│   ├── audio/
-│   └── text/
-│
-├── uploads/
-├── reports/
-├── database/
-├── utils/
-├── static/
-├── history/
-│
-├── requirements.txt
-├── README.md
-└── LICENSE
-```
-
----
-
-# ⚙️ Installation
-
-## Clone Repository
-
-```bash
-git clone https://github.com/yourusername/TruthLens-AI.git
-```
-
-```bash
-cd TruthLens-AI
-```
-
----
-
-## Create Virtual Environment
-
-### Windows
-
-```bash
-python -m venv venv
-```
-
-```bash
-venv\Scripts\activate
-```
-
-### Linux / Mac
-
-```bash
-python3 -m venv venv
-```
-
-```bash
-source venv/bin/activate
-```
-
----
-
-## Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
----
-
-## Run Application
+Run the app:
 
 ```bash
 python app.py
 ```
 
-Application will start on:
+The app will launch locally at `http://127.0.0.1:7861` and also generate a temporary **public share link** (via `share=True`).
+
+### How it works
+
+1. **Signup** — Create an account with a username, email, and password (min. 6 characters).
+2. **Login** — Sign in using your username *or* email.
+3. Once logged in, the main dashboard unlocks with tabs for **Image, Video, Audio, and Text** detection.
+4. **Logout** anytime to return to the login screen.
+
+> The app requires login before any detection tool can be accessed — unauthenticated users only see the Login/Signup screen.
+
+---
+
+## 🗂️ Project Structure
 
 ```
-http://127.0.0.1:7860
+truthlens-ai/
+├── app.py                  # Main application (UI + auth + logic)
+├── truthlens_users.db      # SQLite database (auto-created on first run)
+└── README.md
 ```
 
 ---
 
-# 📁 Supported Formats
+## 🔒 Security Notes
 
-## Images
-
-- JPG
-- JPEG
-- PNG
+- Passwords are **never stored in plain text** — each password is hashed with PBKDF2-HMAC-SHA256 (100,000 iterations) using a unique random salt per user.
+- Password comparison uses `secrets.compare_digest` to prevent timing attacks.
+- `truthlens_users.db` is created automatically on first run — **do not commit this file to GitHub** (see `.gitignore` below).
 
 ---
 
-## Videos
+## 🧾 Suggested `.gitignore`
 
-- MP4
-- AVI
-- MOV
-
----
-
-## Audio
-
-- MP3
-- WAV
+```
+truthlens_users.db
+__pycache__/
+venv/
+*.pyc
+```
 
 ---
 
-## Text
+## 🛣️ Roadmap
 
-- Plain Text
-- News Articles
-- Social Media Content
-
----
-
-# 🔍 Detection Workflow
-
-1. User logs into TruthLens AI.
-2. Uploads Image, Video, Audio, or Text.
-3. Python backend processes the input.
-4. AI model analyzes the content.
-5. Prediction is generated.
-6. Confidence score is calculated.
-7. Explanation is generated.
-8. Results are stored in MongoDB.
-9. Report is generated.
-10. User can download the report.
+- [ ] Integrate real AI deepfake detection models (image/video)
+- [ ] Integrate voice similarity/speaker verification model
+- [ ] Integrate NLP-based misinformation detection model
+- [ ] Persist analysis history per user in the database
+- [ ] Enable real PDF report generation and download
+- [ ] Add "Forgot Password" / password reset flow
+- [ ] Add email verification on signup
 
 ---
 
-# 💡 Future Improvements
+## 📊 Dashboard Stats (placeholder)
 
-- Live Camera Detection
-- Real-time Video Detection
-- API Integration
-- Mobile Application
-- Multi-language Support
-- Explainable AI Improvements
-- Cloud Deployment
-- Batch Processing
-- AI Model Optimization
+| Metric              | Value |
+|----------------------|-------|
+| Total Modules         | 4     |
+| AI Models             | 4     |
+| Detection Accuracy*   | 95%   |
+
+\* Placeholder value — will reflect actual model performance once the AI backend is integrated.
 
 ---
 
-# 🛡️ Security
+## 📄 License
 
-- Password Hashing
-- Secure Authentication
-- MongoDB Data Storage
-- File Validation
-- Session Handling
+This project is developed as a **Final Year Project**. Add your preferred license here (e.g. MIT) if you plan to open-source it.
 
 ---
 
-# 📈 Project Goals
+## 🙌 Acknowledgements
 
-- Detect AI-generated images.
-- Detect manipulated videos.
-- Detect cloned voices.
-- Detect fake news.
-- Improve digital media authenticity.
-- Help users identify misinformation.
-
----
-
-# 👨‍💻 Developed By
-
-**TruthLens AI Team**
-
-Final Year Project
-
-Bachelor of Software Engineering
-
----
-
-# 📜 License
-
-This project is licensed under the MIT License.
-
----
-
-# ⭐ Acknowledgements
-
-Special thanks to:
-
-- Python
-- Gradio
-- MongoDB
-- PyTorch
-- OpenCV
-- Hugging Face Transformers
-- Open Source AI Community
-
----
-
-# 📬 Contact
-
-For questions or suggestions:
-
-📧 your-email@example.com
-
----
-
-## ⭐ If you like this project, don't forget to Star the repository!
+Built with [Gradio](https://gradio.app) — © 2026 TruthLens AI. All rights reserved.
