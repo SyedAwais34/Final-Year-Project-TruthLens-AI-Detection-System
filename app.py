@@ -1,4 +1,183 @@
 import gradio as gr
+import sqlite3
+import hashlib
+import secrets
+from datetime import datetime
+
+
+# ============================================================
+# AUTHENTICATION SYSTEM
+# ============================================================
+
+DB_NAME = "truthlens_users.db"
+
+
+# -----------------------------
+# Database Initialization
+# -----------------------------
+
+def init_db():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+init_db()
+
+
+# -----------------------------
+# Password Hashing
+# -----------------------------
+
+def hash_password(password):
+    salt = secrets.token_hex(16)
+
+    password_hash = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
+        100000
+    ).hex()
+
+    return f"{salt}:{password_hash}"
+
+
+def verify_password(password, stored_password):
+    try:
+        salt, stored_hash = stored_password.split(":")
+
+        password_hash = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            salt.encode("utf-8"),
+            100000
+        ).hex()
+
+        return secrets.compare_digest(password_hash, stored_hash)
+
+    except Exception:
+        return False
+
+
+# -----------------------------
+# Signup
+# -----------------------------
+
+def signup_user(username, email, password, confirm_password):
+
+    username = (username or "").strip()
+    email = (email or "").strip().lower()
+
+    if not username or not email or not password:
+        return "❌ Please fill all fields."
+
+    if len(username) < 3:
+        return "❌ Username must contain at least 3 characters."
+
+    if "@" not in email:
+        return "❌ Please enter a valid email address."
+
+    if len(password) < 6:
+        return "❌ Password must contain at least 6 characters."
+
+    if password != confirm_password:
+        return "❌ Passwords do not match."
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    try:
+        password_hash = hash_password(password)
+
+        cursor.execute("""
+            INSERT INTO users (username, email, password_hash, created_at)
+            VALUES (?, ?, ?, ?)
+        """, (
+            username,
+            email,
+            password_hash,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ))
+
+        conn.commit()
+        return "✅ Account created successfully! You can now login."
+
+    except sqlite3.IntegrityError:
+        return "❌ Username or email already exists."
+
+    finally:
+        conn.close()
+
+
+# -----------------------------
+# Login
+# -----------------------------
+
+def login_user(username_or_email, password):
+
+    username_or_email = (username_or_email or "").strip().lower()
+
+    if not username_or_email or not password:
+        return "❌ Please enter username/email and password.", False, "", gr.update(visible=True), gr.update(visible=False)
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT username, email, password_hash
+        FROM users
+        WHERE LOWER(username) = ? OR LOWER(email) = ?
+    """, (username_or_email, username_or_email))
+
+    user = cursor.fetchone()
+    conn.close()
+
+    if user is None:
+        return "❌ Account not found.", False, "", gr.update(visible=True), gr.update(visible=False)
+
+    username, email, password_hash = user
+
+    if verify_password(password, password_hash):
+        return f"✅ Welcome back, {username}!", True, username, gr.update(visible=False), gr.update(visible=True)
+
+    return "❌ Incorrect password.", False, "", gr.update(visible=True), gr.update(visible=False)
+
+
+# -----------------------------
+# Logout
+# -----------------------------
+
+def logout_user():
+    return (
+        False,                     # logged_in
+        "",                        # current_user
+        "",                        # login_message
+        gr.update(visible=True),   # auth_screen
+        gr.update(visible=False),  # main_app
+    )
+
+
+# -----------------------------
+# Welcome text helper
+# -----------------------------
+
+def make_welcome(username):
+    if username:
+        return f"### 👤 Welcome, **{username}**"
+    return "### 👤 Welcome"
+
 
 # ============================================================
 # Dummy Functions (Backend Later)
@@ -50,28 +229,9 @@ def analyze_text(text):
 # ============================================================
 
 css = """
-/* ======================================================
-       TruthLens AI — Aurora Violet Premium Theme
-====================================================== */
+footer{ display:none!important; }
 
-footer{
-display:none!important;
-}
-
-body{
-background:#071410!important;
-margin:0!important;
-min-height:100vh!important;
-}
-
-html{
-background:#071410!important;
-overflow-x:hidden!important;
-}
-
-body{
-overflow-x:hidden!important;
-}
+body, html{ background:#071410!important; margin:0!important; min-height:100vh!important; overflow-x:hidden!important; }
 
 gradio-app{
 display:block!important;
@@ -90,8 +250,6 @@ min-height:100vh!important;
 box-sizing:border-box!important;
 }
 
-/* ================= Cards ================= */
-
 .block{
 background:rgba(255,255,255,.05)!important;
 backdrop-filter:blur(20px);
@@ -101,54 +259,20 @@ padding:20px!important;
 box-shadow:0 15px 35px rgba(0,0,0,.45);
 }
 
-/* ================= Text ================= */
+h1{ color:white!important; font-size:42px!important; text-align:center; font-weight:700; }
+h2{ color:#6ee7b7!important; }
+h3{ color:white!important; }
+p{ color:#f1f5f9!important; }
+label{ color:white!important; }
 
-h1{
-color:white!important;
-font-size:42px!important;
-text-align:center;
-font-weight:700;
+.prose, .prose p, .prose li{ color:white!important; }
+.prose strong{ color:#fbbf24!important; }
+.gr-markdown{ color:white!important; }
+
+#auth-card{
+max-width:520px;
+margin:60px auto;
 }
-
-h2{
-color:#6ee7b7!important;
-}
-
-h3{
-color:white!important;
-}
-
-p{
-color:#f1f5f9!important;
-}
-
-label{
-color:white!important;
-}
-
-/* Markdown Fix */
-
-.prose{
-color:white!important;
-}
-
-.prose p{
-color:white!important;
-}
-
-.prose li{
-color:white!important;
-}
-
-.prose strong{
-color:#fbbf24!important;
-}
-
-.gr-markdown{
-color:white!important;
-}
-
-/* ================= Header ================= */
 
 #tl-header{
 position:sticky;
@@ -185,18 +309,9 @@ background:linear-gradient(90deg,#a7f3d0,#fbbf24);
 background-clip:text;
 }
 
-#tl-header .tagline{
-color:#6ee7b7!important;
-font-size:14px!important;
-margin:0!important;
-}
+#tl-header .tagline{ color:#6ee7b7!important; font-size:14px!important; margin:0!important; }
 
-#tl-header .badges{
-display:flex;
-gap:8px;
-flex-wrap:wrap;
-justify-content:flex-end;
-}
+#tl-header .badges{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
 
 #tl-header .badges span{
 background:rgba(52,211,153,.18);
@@ -208,94 +323,25 @@ border-radius:999px;
 white-space:nowrap;
 }
 
-/* ================= Hero ================= */
+#tl-hero{ text-align:center; padding:10px 10px 4px 10px!important; background:transparent!important; border:none!important; box-shadow:none!important; }
+#tl-hero p{ font-size:16px!important; }
 
-#tl-hero{
-text-align:center;
-padding:10px 10px 4px 10px!important;
-background:transparent!important;
-border:none!important;
-box-shadow:none!important;
-}
+button[role="tab"]{ background:#113328!important; color:white!important; border-radius:10px!important; padding:10px 20px!important; margin-right:8px!important; }
+button[role="tab"]:hover{ background:#10b981!important; }
+button[aria-selected="true"]{ background:linear-gradient(90deg,#10b981,#34d399)!important; }
 
-#tl-hero p{
-font-size:16px!important;
-}
+button{ border-radius:12px!important; font-weight:bold!important; transition:.3s; }
+button:hover{ transform:translateY(-2px); }
 
-/* ================= Tabs ================= */
+.gr-button-primary, button.primary{ background:linear-gradient(90deg,#10b981,#059669)!important; border:none!important; color:white!important; }
+.gr-button-primary:hover, button.primary:hover{ background:linear-gradient(90deg,#8b5cf6,#2dd4bf)!important; box-shadow:0 8px 20px rgba(52,211,153,.4); }
 
-button[role="tab"]{
-background:#113328!important;
-color:white!important;
-border-radius:10px!important;
-padding:10px 20px!important;
-margin-right:8px!important;
-}
+textarea, input{ background:#0d1f1a!important; color:white!important; border:1px solid #1e4a3a!important; }
+textarea:focus, input:focus{ border:1px solid #34d399!important; box-shadow:0 0 0 2px rgba(52,211,153,.25)!important; }
 
-button[role="tab"]:hover{
-background:#10b981!important;
-}
+img, video{ border-radius:15px!important; }
 
-button[aria-selected="true"]{
-background:linear-gradient(90deg,#10b981,#34d399)!important;
-}
-
-/* ================= Buttons ================= */
-
-button{
-border-radius:12px!important;
-font-weight:bold!important;
-transition:.3s;
-}
-
-button:hover{
-transform:translateY(-2px);
-}
-
-.gr-button-primary, button.primary{
-background:linear-gradient(90deg,#10b981,#059669)!important;
-border:none!important;
-color:white!important;
-}
-
-.gr-button-primary:hover, button.primary:hover{
-background:linear-gradient(90deg,#8b5cf6,#2dd4bf)!important;
-box-shadow:0 8px 20px rgba(52,211,153,.4);
-}
-
-/* ================= Inputs ================= */
-
-textarea,
-input{
-background:#0d1f1a!important;
-color:white!important;
-border:1px solid #1e4a3a!important;
-}
-
-textarea:focus,
-input:focus{
-border:1px solid #34d399!important;
-box-shadow:0 0 0 2px rgba(52,211,153,.25)!important;
-}
-
-/* ================= Upload ================= */
-
-img{
-border-radius:15px!important;
-}
-
-video{
-border-radius:15px!important;
-}
-
-/* ================= Table ================= */
-
-table{
-background:#0d1f1a!important;
-color:white!important;
-}
-
-/* ================= Footer ================= */
+table{ background:#0d1f1a!important; color:white!important; }
 
 #tl-footer{
 margin:30px -25px 0 -25px;
@@ -308,102 +354,39 @@ box-shadow:none!important;
 text-align:center;
 }
 
-#tl-footer .footer-links{
-display:flex;
-justify-content:center;
-gap:22px;
-flex-wrap:wrap;
-margin:10px 0 14px 0;
-}
+#tl-footer .footer-links{ display:flex; justify-content:center; gap:22px; flex-wrap:wrap; margin:10px 0 14px 0; }
+#tl-footer .footer-links span{ color:#6ee7b7!important; font-size:14px!important; }
+#tl-footer .copyright{ color:#4d7a68!important; font-size:13px!important; }
 
-#tl-footer .footer-links span{
-color:#6ee7b7!important;
-font-size:14px!important;
-}
-
-#tl-footer .copyright{
-color:#4d7a68!important;
-font-size:13px!important;
-}
-
-/* ================= Scroll ================= */
-
-::-webkit-scrollbar{
-width:8px;
-}
-
-::-webkit-scrollbar-thumb{
-background:#10b981;
-border-radius:20px;
-}
-
-/* ================= Responsive ================= */
+::-webkit-scrollbar{ width:8px; }
+::-webkit-scrollbar-thumb{ background:#10b981; border-radius:20px; }
 
 @media(max-width:1200px){
-.gradio-container{
-width:98%!important;
-padding:0 15px 15px 15px!important;
-}
-#tl-header{
-margin:0 -15px 16px -15px;
-padding:14px 18px!important;
-}
-#tl-footer{
-margin:24px -15px 0 -15px;
-padding:24px 18px 16px 18px!important;
-}
+.gradio-container{ width:98%!important; padding:0 15px 15px 15px!important; }
+#tl-header{ margin:0 -15px 16px -15px; padding:14px 18px!important; }
+#tl-footer{ margin:24px -15px 0 -15px; padding:24px 18px 16px 18px!important; }
 }
 
 @media(max-width:900px){
-#tl-header .header-inner{
-justify-content:center;
-text-align:center;
-}
-#tl-header h1{
-text-align:center;
-width:100%;
-}
-#tl-header .badges{
-justify-content:center;
-width:100%;
-}
+#tl-header .header-inner{ justify-content:center; text-align:center; }
+#tl-header h1{ text-align:center; width:100%; }
+#tl-header .badges{ justify-content:center; width:100%; }
 }
 
 @media(max-width:768px){
-h1{
-font-size:26px!important;
-}
-#tl-header h1{
-font-size:20px!important;
-}
-#tl-hero h1{
-font-size:26px!important;
-}
-button{
-width:100%!important;
-}
-button[role="tab"]{
-padding:8px 12px!important;
-font-size:13px!important;
-margin-right:4px!important;
-}
-.block{
-padding:14px!important;
-}
+h1{ font-size:26px!important; }
+#tl-header h1{ font-size:20px!important; }
+#tl-hero h1{ font-size:26px!important; }
+button{ width:100%!important; }
+button[role="tab"]{ padding:8px 12px!important; font-size:13px!important; margin-right:4px!important; }
+.block{ padding:14px!important; }
 }
 
 @media(max-width:480px){
-#tl-header .badges span{
-font-size:11px!important;
-padding:4px 9px;
+#tl-header .badges span{ font-size:11px!important; padding:4px 9px; }
+#tl-footer .footer-links{ gap:12px; }
 }
-#tl-footer .footer-links{
-gap:12px;
-}
-}
-
 """
-
 
 theme = gr.themes.Soft(
     primary_hue="emerald",
@@ -414,393 +397,312 @@ theme = gr.themes.Soft(
 # Main App
 # ============================================================
 
-with gr.Blocks(
-    title="TruthLens AI",
-    theme=theme,
-    css=css,
-) as demo:
+with gr.Blocks(title="TruthLens AI") as demo:
 
     # ============================================================
-    # HEADER
+    # SESSION STATE
     # ============================================================
 
-    gr.HTML(
-        """
-        <div class="header-inner">
-            <div>
-                <h1>🛡️ TruthLens AI</h1>
-                <p class="tagline">Advanced Fake Content Detection System</p>
+    logged_in = gr.State(False)
+    current_user = gr.State("")
+
+    # ============================================================
+    # AUTHENTICATION SCREEN (shown first, before login/signup)
+    # ============================================================
+
+    with gr.Column(visible=True, elem_id="auth-card") as auth_screen:
+
+        gr.Markdown("""
+        # 🛡️ TruthLens AI
+        ### Advanced Fake Content Detection System
+
+        🔐 Login or create a new account to continue.
+        """)
+
+        with gr.Tabs():
+
+            # ---------------- LOGIN ----------------
+            with gr.Tab("🔐 Login"):
+
+                login_username = gr.Textbox(
+                    label="Username or Email",
+                    placeholder="Enter username or email"
+                )
+
+                login_password = gr.Textbox(
+                    label="Password",
+                    placeholder="Enter your password",
+                    type="password"
+                )
+
+                login_btn = gr.Button("🔐 Login", variant="primary")
+
+                login_message = gr.Markdown()
+
+            # ---------------- SIGNUP ----------------
+            with gr.Tab("📝 Create Account"):
+
+                signup_username = gr.Textbox(
+                    label="Username",
+                    placeholder="Choose a username"
+                )
+
+                signup_email = gr.Textbox(
+                    label="Email",
+                    placeholder="Enter your email"
+                )
+
+                signup_password = gr.Textbox(
+                    label="Password",
+                    placeholder="Minimum 6 characters",
+                    type="password"
+                )
+
+                signup_confirm = gr.Textbox(
+                    label="Confirm Password",
+                    placeholder="Repeat your password",
+                    type="password"
+                )
+
+                signup_btn = gr.Button("📝 Create Account", variant="primary")
+
+                signup_message = gr.Markdown()
+
+    # ============================================================
+    # MAIN APPLICATION (only visible AFTER login/signup success)
+    # ============================================================
+
+    with gr.Column(visible=False) as main_app:
+
+        # -------- Header --------
+        gr.HTML(
+            """
+            <div class="header-inner">
+                <div>
+                    <h1>🛡️ TruthLens AI</h1>
+                    <p class="tagline">Advanced Fake Content Detection System</p>
+                </div>
+                <div class="badges">
+                    <span>🖼 Image</span>
+                    <span>🎥 Video</span>
+                    <span>🎤 Audio</span>
+                    <span>📝 Text</span>
+                </div>
             </div>
-            <div class="badges">
-                <span>🖼 Image</span>
-                <span>🎥 Video</span>
-                <span>🎤 Audio</span>
-                <span>📝 Text</span>
-            </div>
-        </div>
-        """,
-        elem_id="tl-header"
-    )
+            """,
+            elem_id="tl-header"
+        )
 
-    gr.Markdown(
-        "Detect fake **Images • Videos • Audio • Text** using AI-powered analysis.",
-        elem_id="tl-hero"
-    )
+        # -------- User bar --------
+        with gr.Row():
+            user_welcome = gr.Markdown("### 👤 Welcome")
+            logout_btn = gr.Button("🚪 Logout", variant="secondary")
 
-    with gr.Tabs():
-        # ============================================================
-        # IMAGE TAB
-        # ============================================================
+        gr.Markdown(
+            "Detect fake **Images • Videos • Audio • Text** using AI-powered analysis.",
+            elem_id="tl-hero"
+        )
 
-        with gr.Tab("🖼 Image Detection"):
+        with gr.Tabs():
 
-            gr.Markdown("## Upload an Image")
+            # ============================================================
+            # IMAGE TAB
+            # ============================================================
+            with gr.Tab("🖼 Image Detection"):
 
-            with gr.Row():
+                gr.Markdown("## Upload an Image")
 
-                with gr.Column(scale=1, min_width=260):
+                with gr.Row():
+                    with gr.Column(scale=1, min_width=260):
+                        image_input = gr.Image(type="filepath", label="Upload Image")
+                        image_btn = gr.Button("🔍 Analyze Image", variant="primary")
 
-                    image_input = gr.Image(
-                        type="filepath",
-                        label="Upload Image"
-                    )
+                    with gr.Column(scale=1, min_width=260):
+                        image_preview = gr.Image(label="Preview")
 
-                    image_btn = gr.Button(
-                        "🔍 Analyze Image",
-                        variant="primary"
-                    )
+                gr.Markdown("---")
 
-                with gr.Column(scale=1, min_width=260):
+                with gr.Row():
+                    image_result = gr.Textbox(label="Detection Result")
+                    image_confidence = gr.Textbox(label="Confidence Score")
+                    image_risk = gr.Textbox(label="Risk Level")
 
-                    image_preview = gr.Image(
-                        label="Preview"
-                    )
+                image_reason = gr.Textbox(lines=5, label="AI Explanation")
+                image_report = gr.Textbox(lines=2, label="Report Status")
 
-            gr.Markdown("---")
-
-            with gr.Row():
-
-                image_result = gr.Textbox(
-                    label="Detection Result"
+                image_btn.click(
+                    analyze_image,
+                    inputs=image_input,
+                    outputs=[image_preview, image_result, image_confidence, image_risk, image_reason, image_report]
                 )
 
-                image_confidence = gr.Textbox(
-                    label="Confidence Score"
-                )
+            # ============================================================
+            # VIDEO TAB
+            # ============================================================
+            with gr.Tab("🎥 Video Detection"):
 
-                image_risk = gr.Textbox(
-                    label="Risk Level"
-                )
+                gr.Markdown("## Upload a Video")
 
-            image_reason = gr.Textbox(
-                lines=5,
-                label="AI Explanation"
-            )
+                with gr.Row():
+                    with gr.Column(scale=1, min_width=260):
+                        video_input = gr.Video(label="Upload Video")
+                        video_btn = gr.Button("🎬 Analyze Video", variant="primary")
 
-            image_report = gr.Textbox(
-                lines=2,
-                label="Report Status"
-            )
-
-            image_btn.click(
-                analyze_image,
-                inputs=image_input,
-                outputs=[
-                    image_preview,
-                    image_result,
-                    image_confidence,
-                    image_risk,
-                    image_reason,
-                    image_report
-                ]
-            )
-
-        # ============================================================
-        # VIDEO DETECTION TAB
-        # ============================================================
-
-        with gr.Tab("🎥 Video Detection"):
-
-            gr.Markdown("## Upload a Video")
-
-            with gr.Row():
-
-                with gr.Column(scale=1, min_width=260):
-
-                    video_input = gr.Video(
-                        label="Upload Video"
-                    )
-
-                    video_btn = gr.Button(
-                        "🎬 Analyze Video",
-                        variant="primary"
-                    )
-
-                with gr.Column(scale=1, min_width=260):
-
-                    gr.Markdown("""
+                    with gr.Column(scale=1, min_width=260):
+                        gr.Markdown("""
 ### Supported Formats
-
 ✅ MP4
-
 ✅ AVI
-
 ✅ MOV
 
 Maximum Size: 500 MB
 """)
 
-            gr.Markdown("---")
+                gr.Markdown("---")
 
-            with gr.Row():
+                with gr.Row():
+                    video_result = gr.Textbox(label="Detection Result")
+                    video_confidence = gr.Textbox(label="Confidence Score")
+                    video_risk = gr.Textbox(label="Risk Level")
 
-                video_result = gr.Textbox(
-                    label="Detection Result"
+                video_reason = gr.Textbox(label="AI Explanation", lines=5)
+                video_report = gr.Textbox(label="Report Status", lines=2)
+
+                video_btn.click(
+                    analyze_video,
+                    inputs=video_input,
+                    outputs=[video_result, video_confidence, video_risk, video_reason, video_report]
                 )
 
-                video_confidence = gr.Textbox(
-                    label="Confidence Score"
-                )
+            # ============================================================
+            # AUDIO TAB
+            # ============================================================
+            with gr.Tab("🎤 Audio Detection"):
 
-                video_risk = gr.Textbox(
-                    label="Risk Level"
-                )
+                gr.Markdown("## Upload an Audio File")
 
-            video_reason = gr.Textbox(
-                label="AI Explanation",
-                lines=5
-            )
+                with gr.Row():
+                    with gr.Column(scale=1, min_width=260):
+                        audio_input = gr.Audio(type="filepath", label="Upload Audio")
+                        audio_btn = gr.Button("🎧 Analyze Audio", variant="primary")
 
-            video_report = gr.Textbox(
-                label="Report Status",
-                lines=2
-            )
-
-            video_btn.click(
-                analyze_video,
-                inputs=video_input,
-                outputs=[
-                    video_result,
-                    video_confidence,
-                    video_risk,
-                    video_reason,
-                    video_report
-                ]
-            )
-
-        # ============================================================
-        # AUDIO DETECTION TAB
-        # ============================================================
-
-        with gr.Tab("🎤 Audio Detection"):
-
-            gr.Markdown("## Upload an Audio File")
-
-            with gr.Row():
-
-                with gr.Column(scale=1, min_width=260):
-
-                    audio_input = gr.Audio(
-                        type="filepath",
-                        label="Upload Audio"
-                    )
-
-                    audio_btn = gr.Button(
-                        "🎧 Analyze Audio",
-                        variant="primary"
-                    )
-
-                with gr.Column(scale=1, min_width=260):
-
-                    gr.Markdown("""
+                    with gr.Column(scale=1, min_width=260):
+                        gr.Markdown("""
 ### Voice Verification
-
 ✔ Speaker Matching
-
 ✔ Voice Similarity
-
 ✔ Frequency Analysis
-
 ✔ Tone Analysis
-
 ✔ AI Explanation
 """)
 
-            gr.Markdown("---")
+                gr.Markdown("---")
 
-            with gr.Row():
+                with gr.Row():
+                    audio_result = gr.Textbox(label="Detection Result")
+                    audio_confidence = gr.Textbox(label="Confidence Score")
+                    audio_match = gr.Textbox(label="Matched Voice")
 
-                audio_result = gr.Textbox(
-                    label="Detection Result"
+                audio_reason = gr.Textbox(label="AI Explanation", lines=5)
+                audio_report = gr.Textbox(label="Report Status", lines=2)
+
+                audio_btn.click(
+                    analyze_audio,
+                    inputs=audio_input,
+                    outputs=[audio_result, audio_confidence, audio_match, audio_reason, audio_report]
                 )
 
-                audio_confidence = gr.Textbox(
-                    label="Confidence Score"
+            # ============================================================
+            # TEXT TAB
+            # ============================================================
+            with gr.Tab("📝 Text Detection"):
+
+                gr.Markdown("## Analyze News Article or Social Media Text")
+
+                text_input = gr.Textbox(
+                    label="Enter Text",
+                    placeholder="Paste any news article, social media post, or paragraph here...",
+                    lines=10
                 )
 
-                audio_match = gr.Textbox(
-                    label="Matched Voice"
+                text_btn = gr.Button("🧠 Analyze Text", variant="primary")
+
+                gr.Markdown("---")
+
+                with gr.Row():
+                    text_result = gr.Textbox(label="Detection Result")
+                    text_confidence = gr.Textbox(label="Confidence Score")
+                    text_risk = gr.Textbox(label="Risk Level")
+
+                text_reason = gr.Textbox(label="AI Explanation", lines=5)
+                text_report = gr.Textbox(label="Report Status", lines=2)
+
+                text_btn.click(
+                    analyze_text,
+                    inputs=text_input,
+                    outputs=[text_result, text_confidence, text_risk, text_reason, text_report]
                 )
 
-            audio_reason = gr.Textbox(
-                label="AI Explanation",
-                lines=5
-            )
+            # ============================================================
+            # HISTORY TAB
+            # ============================================================
+            with gr.Tab("📜 History"):
 
-            audio_report = gr.Textbox(
-                label="Report Status",
-                lines=2
-            )
+                gr.Markdown("## Previous Analysis History")
 
-            audio_btn.click(
-                analyze_audio,
-                inputs=audio_input,
-                outputs=[
-                    audio_result,
-                    audio_confidence,
-                    audio_match,
-                    audio_reason,
-                    audio_report
-                ]
-            )
-
-        # ============================================================
-        # TEXT DETECTION TAB
-        # ============================================================
-
-        with gr.Tab("📝 Text Detection"):
-
-            gr.Markdown("## Analyze News Article or Social Media Text")
-
-            text_input = gr.Textbox(
-                label="Enter Text",
-                placeholder="Paste any news article, social media post, or paragraph here...",
-                lines=10
-            )
-
-            text_btn = gr.Button(
-                "🧠 Analyze Text",
-                variant="primary"
-            )
-
-            gr.Markdown("---")
-
-            with gr.Row():
-
-                text_result = gr.Textbox(
-                    label="Detection Result"
-                )
-
-                text_confidence = gr.Textbox(
-                    label="Confidence Score"
-                )
-
-                text_risk = gr.Textbox(
-                    label="Risk Level"
-                )
-
-            text_reason = gr.Textbox(
-                label="AI Explanation",
-                lines=5
-            )
-
-            text_report = gr.Textbox(
-                label="Report Status",
-                lines=2
-            )
-
-            text_btn.click(
-                analyze_text,
-                inputs=text_input,
-                outputs=[
-                    text_result,
-                    text_confidence,
-                    text_risk,
-                    text_reason,
-                    text_report
-                ]
-            )
-
-        # ============================================================
-        # HISTORY TAB
-        # ============================================================
-
-        with gr.Tab("📜 History"):
-
-            gr.Markdown("## Previous Analysis History")
-
-            history_table = gr.Dataframe(
-                headers=[
-                    "Type",
-                    "Result",
-                    "Confidence",
-                    "Date"
-                ],
-                value=[
+                history_data = [
                     ["Image", "Fake", "92%", "2026-07-08"],
                     ["Video", "Real", "96%", "2026-07-07"],
                     ["Audio", "Real", "95%", "2026-07-06"],
                     ["Text", "Misleading", "84%", "2026-07-05"],
-                ],
-                interactive=False
-            )
+                ]
 
-            refresh_btn = gr.Button("🔄 Refresh History")
+                history_table = gr.Dataframe(
+                    headers=["Type", "Result", "Confidence", "Date"],
+                    value=history_data,
+                    interactive=False
+                )
 
-            refresh_btn.click(
-                lambda: history_table.value,
-                outputs=history_table
-            )
+                refresh_btn = gr.Button("🔄 Refresh History")
 
-        # ============================================================
-        # REPORTS TAB
-        # ============================================================
+                refresh_btn.click(lambda: history_data, outputs=history_table)
 
-        with gr.Tab("📄 Reports"):
+            # ============================================================
+            # REPORTS TAB
+            # ============================================================
+            with gr.Tab("📄 Reports"):
 
-            gr.Markdown("## AI Analysis Report")
+                gr.Markdown("## AI Analysis Report")
 
-            report_text = gr.Markdown("""
-
+                gr.Markdown("""
 ### Report Summary
-
 This section will display:
 
 ✅ Detection Result
-
 ✅ Confidence Score
-
 ✅ AI Explanation
-
 ✅ Risk Assessment
-
 ✅ Voice Matching Details
-
 ✅ PDF Report Download
-
 """)
 
-            report_status = gr.Textbox(
-                value="Backend integration required for report generation.",
-                label="Status"
-            )
+                report_status = gr.Textbox(
+                    value="Backend integration required for report generation.",
+                    label="Status"
+                )
 
-            download_btn = gr.Button("📥 Download Report")
+                download_btn = gr.Button("📥 Download Report")
+                download_output = gr.Textbox(label="Message")
 
-            download_output = gr.Textbox(label="Message")
+                download_btn.click(
+                    lambda: "PDF generation will be available after backend integration.",
+                    outputs=download_output
+                )
 
-            download_btn.click(
-                lambda: "PDF generation will be available after backend integration.",
-                outputs=download_output
-            )
+        # -------- About section --------
+        gr.Markdown("---")
 
-    # ============================================================
-    # ABOUT SECTION
-    # ============================================================
-
-    gr.Markdown("---")
-
-    gr.Markdown("""
+        gr.Markdown("""
 # ℹ️ About TruthLens AI
 
 TruthLens AI is an intelligent fake content detection platform capable of
@@ -809,29 +711,18 @@ analyzing Images, Videos, Audio, and Text using Artificial Intelligence.
 The system provides:
 
 ✅ Fake Content Detection
-
 ✅ Confidence Score
-
 ✅ AI Explanation
-
 ✅ Voice Matching
-
 ✅ Report Generation
 
 Designed as a Final Year Project.
 """)
 
-    # ============================================================
-    # SYSTEM FEATURES
-    # ============================================================
-
-    with gr.Row():
-
-        with gr.Column(min_width=260):
-
-            gr.Markdown("""
+        with gr.Row():
+            with gr.Column(min_width=260):
+                gr.Markdown("""
 ## 🚀 Features
-
 - Image Deepfake Detection
 - Video Deepfake Detection
 - Audio Verification
@@ -841,69 +732,93 @@ Designed as a Final Year Project.
 - Analysis History
 """)
 
-        with gr.Column(min_width=260):
-
-            gr.Markdown("""
+            with gr.Column(min_width=260):
+                gr.Markdown("""
 ## 📊 Dashboard Statistics
-
 Total Modules : 4
-
 AI Models : 4
-
 Detection Accuracy : 95%*
 
 Supported Formats:
-
 ✔ JPG
-
 ✔ PNG
-
 ✔ MP4
-
 ✔ AVI
-
 ✔ MP3
-
 ✔ WAV
-
 ✔ TXT
 """)
 
-    gr.Markdown("""
+        gr.Markdown("""
 > **Note:** Accuracy values shown in this frontend are placeholders. They will reflect actual model performance once the AI backend is integrated.
 """)
 
+        # -------- Footer --------
+        gr.HTML(
+            """
+            <div>
+                <h3 style="text-align:center;margin:0 0 6px 0;">🛡 TruthLens AI</h3>
+                <p style="text-align:center;margin:0 0 14px 0;color:#6ee7b7;">
+                    Advanced Fake Content Detection System
+                </p>
+                <div class="footer-links">
+                    <span>🖼 Image Detection</span>
+                    <span>🎥 Video Detection</span>
+                    <span>🎤 Audio Detection</span>
+                    <span>📝 Text Detection</span>
+                    <span>📜 History</span>
+                    <span>📄 Reports</span>
+                </div>
+                <p class="copyright">Developed as Final Year Project • © 2026 All Rights Reserved</p>
+            </div>
+            """,
+            elem_id="tl-footer"
+        )
+
     # ============================================================
-    # FOOTER
+    # AUTH EVENT WIRING (placed after both screens exist)
     # ============================================================
 
-    gr.HTML(
-        """
-        <div>
-            <h3 style="text-align:center;margin:0 0 6px 0;">🛡 TruthLens AI</h3>
-            <p style="text-align:center;margin:0 0 14px 0;color:#6ee7b7;">
-                Advanced Fake Content Detection System
-            </p>
-            <div class="footer-links">
-                <span>🖼 Image Detection</span>
-                <span>🎥 Video Detection</span>
-                <span>🎤 Audio Detection</span>
-                <span>📝 Text Detection</span>
-                <span>📜 History</span>
-                <span>📄 Reports</span>
-            </div>
-            <p class="copyright">Developed as Final Year Project • © 2026 All Rights Reserved</p>
-        </div>
-        """,
-        elem_id="tl-footer"
+    login_btn.click(
+        login_user,
+        inputs=[login_username, login_password],
+        outputs=[login_message, logged_in, current_user, auth_screen, main_app]
+    ).then(
+        make_welcome,
+        inputs=current_user,
+        outputs=user_welcome
     )
+
+    signup_btn.click(
+        signup_user,
+        inputs=[signup_username, signup_email, signup_password, signup_confirm],
+        outputs=signup_message
+    )
+
+    logout_btn.click(
+        logout_user,
+        outputs=[logged_in, current_user, login_message, auth_screen, main_app]
+    )
+
 
 # ============================================================
 # LAUNCH APP
 # ============================================================
 
-demo.launch(
-    server_name="127.0.0.1",
-    server_port=7861,
-    share=True
-)
+if __name__ == "__main__":
+    try:
+        # Gradio 6.x: theme/css belong on launch()
+        demo.launch(
+            server_name="127.0.0.1",
+            server_port=7861,
+            share=True,
+            theme=theme,
+            css=css,
+        )
+    except TypeError:
+        # Older Gradio versions: theme/css belong on Blocks(), re-launch without them
+        demo.launch(
+            server_name="127.0.0.1",
+            server_port=7861,
+            share=True,
+        )
